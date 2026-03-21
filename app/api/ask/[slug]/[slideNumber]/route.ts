@@ -50,7 +50,9 @@ Student's question: ${question}`,
     ]);
 
     const answer = result.response.text();
-    return NextResponse.json({ answer });
+    return new Response(JSON.stringify({ answer }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

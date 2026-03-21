@@ -72,11 +72,17 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
         body: JSON.stringify({ question }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setEntries((prev) => [...prev, { slideNumber: slideNum, question, answer: data.answer }]);
+      const text = await res.text();
+      let data: { answer?: string; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: "Invalid response from server" };
+      }
+
+      if (res.ok && data.answer) {
+        setEntries((prev) => [...prev, { slideNumber: slideNum, question, answer: data.answer! }]);
       } else {
-        const data = await res.json().catch(() => ({}));
         setEntries((prev) => [
           ...prev,
           { slideNumber: slideNum, question, answer: data.error || "Could not get an answer. Try again." },

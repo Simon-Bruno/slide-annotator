@@ -27,15 +27,20 @@ export async function loadDeckMetadata(slug: string): Promise<DeckMetadata> {
 }
 
 export async function saveAnnotations(slug: string, annotations: Annotation[]): Promise<void> {
-  await fs.writeFile(
-    path.join(getDeckDir(slug), "annotations.json"),
-    JSON.stringify(annotations, null, 2)
-  );
+  const filePath = path.join(getDeckDir(slug), "annotations.json");
+  const tmpPath = filePath + ".tmp";
+  // Atomic write: write to tmp file then rename (prevents read of partial data)
+  await fs.writeFile(tmpPath, JSON.stringify(annotations, null, 2));
+  await fs.rename(tmpPath, filePath);
 }
 
 export async function loadAnnotations(slug: string): Promise<Annotation[]> {
-  const raw = await fs.readFile(path.join(getDeckDir(slug), "annotations.json"), "utf-8");
-  return JSON.parse(raw);
+  try {
+    const raw = await fs.readFile(path.join(getDeckDir(slug), "annotations.json"), "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
 }
 
 export async function listDecks(): Promise<DeckMetadata[]> {
