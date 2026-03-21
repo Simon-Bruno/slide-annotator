@@ -21,32 +21,40 @@ export async function POST(
   try {
     const body = await request.json();
     const question = body.question;
+    const isFirstQuestion = body.isFirstQuestion !== false; // default true
     if (!question) {
       return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    const slidesDir = getSlidesDir(slug);
-    const slideImagePath = path.join(slidesDir, `slide-${String(slideNumber).padStart(2, "0")}.png`);
-    const slideData = await fs.readFile(slideImagePath);
-
     const annotations = await loadAnnotations(slug);
     const annotation = annotations.find((a) => a.slideNumber === slideNumber);
+    const regions = annotation?.regions?.map((r) => `[${r.label}]: ${r.annotation}`).join("\n") || "";
+    const concepts = annotation?.keyConcepts?.map((c) => `${c.term}: ${c.definition} — ${c.detail}`).join("\n") || "";
     const context = annotation
-      ? `Existing annotation for this slide:\nTitle: ${annotation.title}\nSummary: ${annotation.summary}\nExplanation: ${annotation.explanation}`
+      ? `Slide ${slideNumber}: "${annotation.title}"\nSummary: ${annotation.summary}\nExplanation: ${annotation.explanation}\nRegions:\n${regions}\nKey Concepts:\n${concepts}\nConnections: ${annotation.connections}`
       : "";
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
-    const result = await model.generateContentStream([
+    // Build content: include image only on first question, text-only for follow-ups
+    const contentParts: Array<string | { inlineData: { data: string; mimeType: string } }> = [
       `You are an expert AI tutor helping a Master's AI student understand a lecture slide. Answer their question directly, concisely, and precisely. Use LaTeX ($...$) for math. Keep your answer to 2-5 sentences unless the question requires more detail.
 
 ${context}
 
 Student's question: ${question}`,
-      "The slide:",
-      { inlineData: { data: slideData.toString("base64"), mimeType: "image/png" } },
-    ]);
+    ];
+
+    if (isFirstQuestion) {
+      const slidesDir = getSlidesDir(slug);
+      const slideImagePath = path.join(slidesDir, `slide-${String(slideNumber).padStart(2, "0")}.png`);
+      const slideData = await fs.readFile(slideImagePath);
+      contentParts.push("The slide:");
+      contentParts.push({ inlineData: { data: slideData.toString("base64"), mimeType: "image/png" } });
+    }
+
+    const result = await model.generateContentStream(contentParts);
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({

@@ -59,7 +59,7 @@ export function AnnotationPanel({
       const res = await fetch(`/api/ask/${slug}/${annotation.slideNumber}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, isFirstQuestion: entries.length === 0 }),
       });
 
       if (!res.ok || !res.body) {
