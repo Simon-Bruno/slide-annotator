@@ -28,6 +28,7 @@ export async function extractPdfPages(
     const context = canvas.getContext("2d");
 
     await page.render({
+      canvas: null,
       canvasContext: context as any,
       viewport,
     }).promise;
