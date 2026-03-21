@@ -49,7 +49,7 @@ export function SlideSection({ annotation, slug, index }: SlideSectionProps) {
       {/* Two-column layout */}
       <div className="lg:grid lg:grid-cols-[50%_1fr] lg:gap-12 relative">
         {/* Slide with edge notches — sticky on desktop */}
-        <div className="lg:sticky lg:top-8 lg:self-start lg:pr-4">
+        <div className="lg:sticky lg:top-[15vh] lg:self-start lg:pr-4">
           <SlideWithHotspots
             src={slideImageSrc}
             slideNumber={annotation.slideNumber}
