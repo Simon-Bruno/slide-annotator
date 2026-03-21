@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { DeckHeader } from "@/components/viewer/DeckHeader";
 import { SlideSection } from "@/components/viewer/SlideSection";
 import { NavigationSidebar } from "@/components/viewer/NavigationSidebar";
-import { SlideQA } from "@/components/viewer/SlideQA";
 import { Annotation, DeckMetadata } from "@/lib/types";
 import Link from "next/link";
 
@@ -107,7 +106,6 @@ export default function DeckPage() {
       </div>
 
       <NavigationSidebar slideCount={metadata.slideCount} />
-      <SlideQA slug={slug} slideCount={metadata.slideCount} />
     </main>
   );
 }

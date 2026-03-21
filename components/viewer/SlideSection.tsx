@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { SlideWithHotspots } from "./SlideWithHotspots";
-import { Explanation } from "./Explanation";
+import { AnnotationPanel } from "./AnnotationPanel";
 import { Annotation } from "@/lib/types";
 
 interface SlideSectionProps {
@@ -33,10 +33,6 @@ export function SlideSection({ annotation, slug, index }: SlideSectionProps) {
     return () => observer.disconnect();
   }, []);
 
-  const handleRegionActivate = (id: number | null) => {
-    setActiveRegion(id);
-  };
-
   return (
     <section
       ref={sectionRef}
@@ -50,7 +46,7 @@ export function SlideSection({ annotation, slug, index }: SlideSectionProps) {
         </p>
       )}
 
-      {/* Two-column layout with connector gap */}
+      {/* Two-column layout */}
       <div className="lg:grid lg:grid-cols-[50%_1fr] lg:gap-12 relative">
         {/* Slide with edge notches — sticky on desktop */}
         <div className="lg:sticky lg:top-8 lg:self-start lg:pr-4">
@@ -59,20 +55,19 @@ export function SlideSection({ annotation, slug, index }: SlideSectionProps) {
             slideNumber={annotation.slideNumber}
             regions={annotation.regions || []}
             activeRegion={activeRegion}
-            onRegionHover={handleRegionActivate}
-            onRegionClick={handleRegionActivate}
+            onRegionHover={setActiveRegion}
+            onRegionClick={setActiveRegion}
           />
         </div>
 
-        {/* Annotations panel */}
+        {/* Right panel: Notes / Ask tabs */}
         <div className="mt-6 lg:mt-0">
-          <Explanation
+          <AnnotationPanel
             annotation={annotation}
             slug={slug}
             activeRegion={activeRegion}
-            onRegionHover={handleRegionActivate}
-            onRegionClick={handleRegionActivate}
-            onRetrySuccess={() => {}}
+            onRegionHover={setActiveRegion}
+            onRegionClick={setActiveRegion}
           />
         </div>
       </div>

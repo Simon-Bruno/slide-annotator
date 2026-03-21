@@ -5,51 +5,28 @@ import ReactMarkdown from "react-markdown";
 import { remarkPlugins, rehypePlugins } from "@/lib/markdown";
 
 interface QAEntry {
-  slideNumber: number;
   question: string;
   answer: string;
 }
 
 interface SlideQAProps {
   slug: string;
-  slideCount: number;
+  slideNumber: number;
 }
 
-export function SlideQA({ slug, slideCount }: SlideQAProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function SlideQA({ slug, slideNumber }: SlideQAProps) {
   const [entries, setEntries] = useState<QAEntry[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [activeSlide, setActiveSlide] = useState(1);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Track which slide is currently in view
+  // Focus input on mount
   useEffect(() => {
-    const handleScroll = () => {
-      let closest = 1;
-      let closestDistance = Infinity;
-      for (let i = 1; i <= slideCount; i++) {
-        const el = document.getElementById(`slide-${i}`);
-        if (!el) continue;
-        const distance = Math.abs(el.getBoundingClientRect().top - 100);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closest = i;
-        }
-      }
-      setActiveSlide(closest);
-    };
+    inputRef.current?.focus();
+  }, []);
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    const timer = setTimeout(handleScroll, 500);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      clearTimeout(timer);
-    };
-  }, [slideCount]);
-
-  // Auto-scroll chat to bottom on new entries
+  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -61,16 +38,13 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
     if (!input.trim() || loading) return;
 
     const question = input.trim();
-    const slideNum = activeSlide;
+    const entryIndex = entries.length;
+    setEntries((prev) => [...prev, { question, answer: "" }]);
     setInput("");
     setLoading(true);
 
-    // Add entry with empty answer, we'll stream into it
-    const entryIndex = entries.length;
-    setEntries((prev) => [...prev, { slideNumber: slideNum, question, answer: "" }]);
-
     try {
-      const res = await fetch(`/api/ask/${slug}/${slideNum}`, {
+      const res = await fetch(`/api/ask/${slug}/${slideNumber}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
@@ -115,123 +89,78 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
     }
   };
 
-  // Floating button
-  if (!isOpen) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setIsOpen(true);
-          setTimeout(() => inputRef.current?.focus(), 150);
-        }}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-accent text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 flex items-center justify-center"
-        title="Ask about a slide"
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </button>
-    );
-  }
-
-  // Chat entries for current slide
-  const currentEntries = entries.filter((e) => e.slideNumber === activeSlide);
-  const otherCount = entries.filter((e) => e.slideNumber !== activeSlide).length;
-
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] max-h-[500px] flex flex-col rounded-2xl bg-white border border-border shadow-2xl overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-accent text-white font-sans text-xs font-bold flex items-center justify-center">
-            {activeSlide}
-          </div>
-          <div>
-            <p className="font-sans text-sm font-semibold text-text">Slide {activeSlide}</p>
-            <p className="font-sans text-[11px] text-text-muted">Ask anything about this slide</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsOpen(false)}
-          className="w-7 h-7 rounded-full hover:bg-bg-subtle flex items-center justify-center transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4 min-h-[120px] max-h-[340px]">
-        {currentEntries.length === 0 && !loading && (
-          <div className="text-center py-6">
-            <p className="font-sans text-sm text-text-muted">
-              No questions yet for Slide {activeSlide}
-            </p>
-            <p className="font-sans text-xs text-text-muted mt-1">
-              Ask anything — the AI sees the slide image and annotations
+    <div className="flex flex-col h-full min-h-[400px]">
+      {/* Messages area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-5 pb-4">
+        {entries.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <div className="w-12 h-12 rounded-full bg-accent-light flex items-center justify-center mb-4">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <p className="font-sans text-sm text-text-secondary font-medium">Ask anything about this slide</p>
+            <p className="font-sans text-xs text-text-muted mt-1 max-w-[280px]">
+              The AI can see the slide image and all annotations. Try asking about formulas, concepts, or comparisons.
             </p>
           </div>
         )}
 
-        {currentEntries.map((entry, i) => (
-          <div key={i} className="space-y-2">
+        {entries.map((entry, i) => (
+          <div key={i} className="space-y-3">
             {/* Question */}
-            <div className="flex justify-end">
-              <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm bg-accent text-white font-sans text-sm">
-                {entry.question}
+            <div className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-full bg-accent text-white font-sans text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                Q
               </div>
+              <p className="font-sans text-sm font-medium text-text pt-0.5">
+                {entry.question}
+              </p>
             </div>
-            {/* Answer — only show when there's content */}
-            {entry.answer && (
-              <div className="flex justify-start">
-                <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-sm bg-bg-subtle font-body text-sm text-text leading-relaxed prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
-                    {entry.answer}
-                  </ReactMarkdown>
-                </div>
+            {/* Answer */}
+            {entry.answer ? (
+              <div className="pl-8 font-body text-[15px] text-text leading-reading prose prose-sm max-w-none prose-headings:font-display prose-a:text-accent prose-code:font-mono prose-code:text-sm prose-code:bg-bg-subtle prose-code:px-1 prose-code:rounded">
+                <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
+                  {entry.answer}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div className="pl-8 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <span className="font-sans text-sm text-text-muted">Thinking...</span>
+              </div>
+            )}
+
+            {/* Separator between Q&A pairs */}
+            {i < entries.length - 1 && (
+              <div className="pl-8 pt-2">
+                <div className="w-8 h-px bg-border" />
               </div>
             )}
           </div>
         ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-bg-subtle flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              <span className="font-sans text-sm text-text-muted">Thinking...</span>
-            </div>
-          </div>
-        )}
-
-        {otherCount > 0 && (
-          <p className="font-sans text-[11px] text-text-muted text-center">
-            {otherCount} question{otherCount !== 1 ? "s" : ""} on other slides
-          </p>
-        )}
       </div>
 
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="flex items-center border-t border-border px-3 py-2 gap-2">
+      {/* Input bar — pinned to bottom */}
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 pt-3 border-t border-border">
         <input
           ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Ask about Slide ${activeSlide}...`}
-          className="flex-1 px-3 py-2 font-sans text-sm bg-bg-subtle rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/30"
+          placeholder="Ask a question..."
+          className="flex-1 px-3 py-2.5 font-sans text-sm bg-bg-subtle rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/30"
           disabled={loading}
         />
         <button
           type="submit"
           disabled={!input.trim() || loading}
-          className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent/90 transition-colors disabled:opacity-30 flex-shrink-0"
+          className="w-9 h-9 rounded-xl bg-accent text-white flex items-center justify-center hover:bg-accent/90 transition-colors disabled:opacity-30 flex-shrink-0"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
           </svg>
         </button>
       </form>
