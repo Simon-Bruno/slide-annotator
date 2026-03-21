@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { loadAnnotations } from "@/lib/storage";
+import { loadAnnotations, getSlidesDir } from "@/lib/storage";
+import fs from "fs/promises";
+import path from "path";
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 export async function POST(
   request: NextRequest,
@@ -31,16 +33,23 @@ export async function POST(
       ? `Slide ${slideNumber}: "${annotation.title}"\nSummary: ${annotation.summary}\nExplanation: ${annotation.explanation}\nRegions:\n${regions}\nKey Concepts:\n${concepts}\nConnections: ${annotation.connections}`
       : "";
 
+    // Load slide image
+    const slidesDir = getSlidesDir(slug);
+    const slideImagePath = path.join(slidesDir, `slide-${String(slideNumber).padStart(2, "0")}.png`);
+    const slideData = await fs.readFile(slideImagePath);
+
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
-    const result = await model.generateContentStream(
+    const result = await model.generateContentStream([
       `You are an expert AI tutor helping a Master's AI student understand a lecture slide. Answer their question directly, concisely, and precisely. Use LaTeX ($...$) for math. Keep your answer to 2-5 sentences unless the question requires more detail.
 
 ${context}
 
-Student's question: ${question}`
-    );
+Student's question: ${question}`,
+      "The slide:",
+      { inlineData: { data: slideData.toString("base64"), mimeType: "image/png" } },
+    ]);
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
