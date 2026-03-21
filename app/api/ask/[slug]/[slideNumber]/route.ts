@@ -25,7 +25,6 @@ export async function POST(
       return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    // Load the slide image and existing annotation for context
     const slidesDir = getSlidesDir(slug);
     const slideImagePath = path.join(slidesDir, `slide-${String(slideNumber).padStart(2, "0")}.png`);
     const slideData = await fs.readFile(slideImagePath);
@@ -39,7 +38,7 @@ export async function POST(
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
-    const result = await model.generateContent([
+    const result = await model.generateContentStream([
       `You are an expert AI tutor helping a Master's AI student understand a lecture slide. Answer their question directly, concisely, and precisely. Use LaTeX ($...$) for math. Keep your answer to 2-5 sentences unless the question requires more detail.
 
 ${context}
@@ -49,9 +48,29 @@ Student's question: ${question}`,
       { inlineData: { data: slideData.toString("base64"), mimeType: "image/png" } },
     ]);
 
-    const answer = result.response.text();
-    return new Response(JSON.stringify({ answer }), {
-      headers: { "Content-Type": "application/json" },
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+            }
+          }
+        } catch (err) {
+          controller.enqueue(encoder.encode(`\n\n[Error: ${(err as Error).message}]`));
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+      },
     });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

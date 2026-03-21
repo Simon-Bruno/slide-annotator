@@ -65,6 +65,10 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
     setInput("");
     setLoading(true);
 
+    // Add entry with empty answer, we'll stream into it
+    const entryIndex = entries.length;
+    setEntries((prev) => [...prev, { slideNumber: slideNum, question, answer: "" }]);
+
     try {
       const res = await fetch(`/api/ask/${slug}/${slideNum}`, {
         method: "POST",
@@ -72,27 +76,39 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
         body: JSON.stringify({ question }),
       });
 
-      const text = await res.text();
-      let data: { answer?: string; error?: string };
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { error: "Invalid response from server" };
-      }
-
-      if (res.ok && data.answer) {
-        setEntries((prev) => [...prev, { slideNumber: slideNum, question, answer: data.answer! }]);
+      if (!res.ok || !res.body) {
+        const text = await res.text();
+        let error = "Could not get an answer. Try again.";
+        try { error = JSON.parse(text).error || error; } catch {}
+        setEntries((prev) => {
+          const updated = [...prev];
+          updated[entryIndex] = { ...updated[entryIndex], answer: error };
+          return updated;
+        });
       } else {
-        setEntries((prev) => [
-          ...prev,
-          { slideNumber: slideNum, question, answer: data.error || "Could not get an answer. Try again." },
-        ]);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          setEntries((prev) => {
+            const updated = [...prev];
+            updated[entryIndex] = {
+              ...updated[entryIndex],
+              answer: updated[entryIndex].answer + chunk,
+            };
+            return updated;
+          });
+        }
       }
     } catch {
-      setEntries((prev) => [
-        ...prev,
-        { slideNumber: slideNum, question, answer: "Network error. Try again." },
-      ]);
+      setEntries((prev) => {
+        const updated = [...prev];
+        updated[entryIndex] = { ...updated[entryIndex], answer: "Network error. Try again." };
+        return updated;
+      });
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -168,14 +184,16 @@ export function SlideQA({ slug, slideCount }: SlideQAProps) {
                 {entry.question}
               </div>
             </div>
-            {/* Answer */}
-            <div className="flex justify-start">
-              <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-sm bg-bg-subtle font-body text-sm text-text leading-relaxed prose prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
-                  {entry.answer}
-                </ReactMarkdown>
+            {/* Answer — only show when there's content */}
+            {entry.answer && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-sm bg-bg-subtle font-body text-sm text-text leading-relaxed prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
+                    {entry.answer}
+                  </ReactMarkdown>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ))}
 
