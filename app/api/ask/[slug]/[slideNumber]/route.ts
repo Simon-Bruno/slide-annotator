@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { loadAnnotations } from "@/lib/storage";
 
-const MODEL_NAME = "gemini-3.1-pro-preview";
+const MODEL_NAME = "gemini-2.5-flash";
 
 export async function POST(
   request: NextRequest,
