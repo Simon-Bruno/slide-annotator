@@ -7,7 +7,6 @@ import {
   getSlidesDir,
 } from "@/lib/storage";
 import { annotateSlide } from "@/lib/gemini";
-import path from "path";
 
 export async function POST(
   _request: NextRequest,
@@ -28,21 +27,8 @@ export async function POST(
     const annotations = await loadAnnotations(slug);
     const slidesDir = getSlidesDir(slug);
 
-    const slideImagePath = path.join(
-      slidesDir,
-      `slide-${String(slideNumber).padStart(2, "0")}.png`
-    );
-    const prevImagePath =
-      slideNumber > 1
-        ? path.join(
-            slidesDir,
-            `slide-${String(slideNumber - 1).padStart(2, "0")}.png`
-          )
-        : null;
-
     const newAnnotation = await annotateSlide(
-      slideImagePath,
-      prevImagePath,
+      slidesDir,
       slideNumber,
       metadata.slideCount
     );

@@ -1,25 +1,75 @@
-import { loadDeckMetadata, loadAnnotations } from "@/lib/storage";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
 import { DeckHeader } from "@/components/viewer/DeckHeader";
 import { SlideSection } from "@/components/viewer/SlideSection";
 import { NavigationSidebar } from "@/components/viewer/NavigationSidebar";
-import { notFound } from "next/navigation";
+import { SlideQA } from "@/components/viewer/SlideQA";
+import { Annotation, DeckMetadata } from "@/lib/types";
 import Link from "next/link";
 
-interface DeckPageProps {
-  params: Promise<{ slug: string }>;
-}
+export default function DeckPage() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug;
 
-export default async function DeckPage({ params }: DeckPageProps) {
-  const { slug } = await params;
+  const [metadata, setMetadata] = useState<DeckMetadata | null>(null);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [isGenerating, setIsGenerating] = useState(true);
 
-  let metadata;
-  let annotations;
-  try {
-    metadata = await loadDeckMetadata(slug);
-    annotations = await loadAnnotations(slug);
-  } catch {
-    notFound();
+  const fetchAnnotations = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/annotations/${slug}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAnnotations(data.annotations);
+
+      if (data.status === "complete" || data.status === "partial") {
+        setIsGenerating(false);
+      }
+    } catch {
+      // will retry on next poll
+    }
+  }, [slug]);
+
+  // Load metadata once
+  useEffect(() => {
+    fetch(`/api/annotations/${slug}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAnnotations(data.annotations);
+        if (data.status === "complete" || data.status === "partial") {
+          setIsGenerating(false);
+        }
+      })
+      .catch(() => {});
+
+    fetch(`/api/decks`)
+      .then((r) => r.json())
+      .then((decks: DeckMetadata[]) => {
+        const deck = decks.find((d) => d.slug === slug);
+        if (deck) setMetadata(deck);
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  // Poll while generating
+  useEffect(() => {
+    if (!isGenerating) return;
+
+    const interval = setInterval(fetchAnnotations, 2000);
+    return () => clearInterval(interval);
+  }, [isGenerating, fetchAnnotations]);
+
+  if (!metadata) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="font-sans text-text-muted">Loading...</p>
+      </main>
+    );
   }
+
+  const completedCount = annotations.filter((a) => !a.pending && a.title).length;
 
   return (
     <main className="min-h-screen px-6 py-16 lg:pl-20">
@@ -36,6 +86,16 @@ export default async function DeckPage({ params }: DeckPageProps) {
 
         <DeckHeader metadata={metadata} />
 
+        {/* Generation progress banner */}
+        {isGenerating && (
+          <div className="mb-12 p-4 rounded-xl bg-accent-light/40 border border-accent/10 flex items-center gap-4">
+            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            <p className="font-sans text-sm text-accent">
+              Generating annotations... {completedCount} of {metadata.slideCount} slides complete
+            </p>
+          </div>
+        )}
+
         {annotations.map((annotation, i) => (
           <SlideSection
             key={annotation.slideNumber}
@@ -47,16 +107,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
       </div>
 
       <NavigationSidebar slideCount={metadata.slideCount} />
+      <SlideQA slug={slug} slideCount={metadata.slideCount} />
     </main>
   );
-}
-
-export async function generateMetadata({ params }: DeckPageProps) {
-  const { slug } = await params;
-  try {
-    const metadata = await loadDeckMetadata(slug);
-    return { title: `${metadata.title} — Slide Annotator` };
-  } catch {
-    return { title: "Deck Not Found — Slide Annotator" };
-  }
 }

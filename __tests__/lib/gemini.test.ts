@@ -3,7 +3,7 @@ import { Annotation } from "@/lib/types";
 
 describe("buildSlidePrompt", () => {
   it("includes slide number and audience context", () => {
-    const prompt = buildSlidePrompt(3, 15);
+    const prompt = buildSlidePrompt(3, 15, [1, 2, 3, 4, 5, 6]);
     expect(prompt).toContain("slide 3 of 15");
     expect(prompt).toContain("Master");
   });

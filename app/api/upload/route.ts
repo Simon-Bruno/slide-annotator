@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { extractPdfPages } from "@/lib/pdf";
-import { annotateSlide } from "@/lib/gemini";
+import { annotateAllSlides, refineConnections } from "@/lib/gemini";
 import {
   ensureDeckDir,
   saveDeckMetadata,
@@ -9,7 +9,6 @@ import {
 } from "@/lib/storage";
 import { generateSlug } from "@/lib/slug";
 import { Annotation, DeckMetadata, SSEMessage } from "@/lib/types";
-import path from "path";
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
@@ -53,13 +52,8 @@ export async function POST(request: NextRequest) {
           controller.close();
           return;
         }
-        send({
-          phase: "extracting",
-          current: slideCount,
-          total: slideCount,
-        });
 
-        // Save initial metadata
+        // Save metadata with "annotating" status and empty annotations
         const metadata: DeckMetadata = {
           title,
           slug,
@@ -71,49 +65,31 @@ export async function POST(request: NextRequest) {
         };
         await saveDeckMetadata(metadata);
 
-        // Phase 2: Annotate each slide
-        const annotations: Annotation[] = [];
-        const failedSlides: number[] = [];
+        // Save empty annotations array — viewer will poll for updates
+        const emptyAnnotations: Annotation[] = Array.from(
+          { length: slideCount },
+          (_, i) => ({
+            slideNumber: i + 1,
+            title: "",
+            summary: "",
+            explanation: "",
+            regions: [],
+            keyConcepts: [],
+            connections: "",
+            error: false,
+            pending: true,
+          })
+        );
+        await saveAnnotations(slug, emptyAnnotations);
 
-        for (let i = 1; i <= slideCount; i++) {
-          send({ phase: "annotating", current: i, total: slideCount });
-
-          const slideImagePath = path.join(
-            slidesDir,
-            `slide-${String(i).padStart(2, "0")}.png`
-          );
-          const prevImagePath =
-            i > 1
-              ? path.join(
-                  slidesDir,
-                  `slide-${String(i - 1).padStart(2, "0")}.png`
-                )
-              : null;
-
-          const annotation = await annotateSlide(
-            slideImagePath,
-            prevImagePath,
-            i,
-            slideCount
-          );
-          annotations.push(annotation);
-
-          if (annotation.error) {
-            failedSlides.push(i);
-          }
-        }
-
-        // Save results
-        await saveAnnotations(slug, annotations);
-        metadata.status =
-          failedSlides.length > 0 ? "partial" : "complete";
-        metadata.failedSlides = failedSlides;
-        await saveDeckMetadata(metadata);
-
+        // Redirect to viewer immediately — annotations will stream in
         send({ phase: "complete", slug });
+        controller.close();
+
+        // Continue annotating in the background
+        annotateInBackground(slidesDir, slug, slideCount, metadata);
       } catch (err) {
         send({ phase: "error", message: (err as Error).message });
-      } finally {
         controller.close();
       }
     },
@@ -126,4 +102,46 @@ export async function POST(request: NextRequest) {
       Connection: "keep-alive",
     },
   });
+}
+
+/**
+ * Runs annotation in the background after the client has been redirected.
+ * Saves annotations incrementally so the viewer can poll for updates.
+ */
+async function annotateInBackground(
+  slidesDir: string,
+  slug: string,
+  slideCount: number,
+  metadata: DeckMetadata
+) {
+  try {
+    let annotations = await annotateAllSlides(
+      slidesDir,
+      slideCount,
+      async (completed, annotation) => {
+        // Save incrementally after each slide completes
+        const { loadAnnotations, saveAnnotations } = await import("@/lib/storage");
+        const current = await loadAnnotations(slug);
+        current[annotation.slideNumber - 1] = annotation;
+        await saveAnnotations(slug, current);
+      }
+    );
+
+    // Refine connections with full lecture narrative
+    annotations = await refineConnections(annotations);
+
+    const failedSlides = annotations
+      .filter((a) => a.error)
+      .map((a) => a.slideNumber);
+
+    // Save final results
+    await saveAnnotations(slug, annotations);
+    metadata.status = failedSlides.length > 0 ? "partial" : "complete";
+    metadata.failedSlides = failedSlides;
+    await saveDeckMetadata(metadata);
+  } catch (err) {
+    console.error("Background annotation failed:", err);
+    metadata.status = "partial";
+    await saveDeckMetadata(metadata);
+  }
 }
