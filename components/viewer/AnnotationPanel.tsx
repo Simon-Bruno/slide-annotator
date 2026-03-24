@@ -27,6 +27,7 @@ export function AnnotationPanel({
   onRegionClick,
 }: AnnotationPanelProps) {
   const [mode, setMode] = useState<"notes" | "ask">("notes");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Q&A state lives here so it persists across tab switches
   const [entries, setEntries] = useState<QAEntry[]>([]);
@@ -38,6 +39,37 @@ export function AnnotationPanel({
   useEffect(() => {
     if (mode === "ask") inputRef.current?.focus();
   }, [mode]);
+
+  // Q key toggles between notes and ask for the closest-to-top visible panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "q" && e.key !== "Q") return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
+
+      // Only toggle the panel closest to the top of the viewport
+      const el = panelRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+
+      // Check this is the closest panel to viewport top
+      const allPanels = document.querySelectorAll("[data-annotation-panel]");
+      let closest: Element | null = null;
+      let closestDist = Infinity;
+      allPanels.forEach((p) => {
+        const r = p.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > window.innerHeight) return;
+        const dist = Math.abs(r.top - 100);
+        if (dist < closestDist) { closestDist = dist; closest = p; }
+      });
+      if (closest !== el) return;
+
+      setMode((prev) => (prev === "notes" ? "ask" : "notes"));
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -103,7 +135,7 @@ export function AnnotationPanel({
   const showTabs = !annotation.pending && annotation.title && !annotation.error;
 
   return (
-    <div>
+    <div ref={panelRef} data-annotation-panel>
       {/* Tab bar */}
       {showTabs && (
         <div className="flex items-center gap-1 mb-5 p-1 bg-bg-subtle rounded-xl w-fit">
