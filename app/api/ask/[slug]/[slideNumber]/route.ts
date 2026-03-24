@@ -42,7 +42,7 @@ export async function POST(
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
     const result = await model.generateContentStream([
-      `You are an expert AI tutor helping a Master's AI student understand a lecture slide. Answer their question directly, concisely, and precisely. Use LaTeX ($...$) for math. Keep your answer to 2-5 sentences unless the question requires more detail.
+      `You are a helpful tutor explaining a lecture slide. Answer simply and intuitively — like you're explaining to a smart friend, not writing a textbook. Avoid jargon unless the student used it first. Use short sentences. Use LaTeX ($...$) for math. Keep answers to 2-4 sentences max.
 
 ${context}
 
